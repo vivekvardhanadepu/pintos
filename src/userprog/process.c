@@ -14,21 +14,31 @@
 #include "threads/flags.h"
 #include "threads/init.h"
 #include "threads/interrupt.h"
+#include "threads/malloc.h"
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+/* Structure for arguments. */
+struct process_args
+  {
+    int argc;
+    char **argv;
+  };
+
+static struct process_args *cmd_parsing(char *str_input);
 static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+static bool load (struct process_args *args, void (**eip) (void), void **esp);
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmd) 
 {
   char *fn_copy;
+  struct process_args *args;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
@@ -36,21 +46,63 @@ process_execute (const char *file_name)
   fn_copy = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
+  strlcpy (fn_copy, cmd, PGSIZE);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
-  return tid;
+  /* Parse arguments into the structure. */
+  args = cmd_parsing (fn_copy);
+  if (args == NULL)
+    {
+      free (args);
+      palloc_free_page (fn_copy);
+      return TID_ERROR;
+    }
+
+  /* Create a new thread to execute the given file name. */
+  pid = (pid_t) thread_create (args->argv[0], PRI_DEFAULT, start_process, args);
+  if (pid == TID_ERROR)
+    {
+      palloc_free_page (args->argv);
+      free(args);
+      palloc_free_page (fn_copy);
+    }
+  return pid;
+}
+
+static struct process_args *cmd_parsing (char *cmd)
+{
+  struct process_args *args;
+  char *s,*l;
+
+  args = (struct process_args *) malloc (sizeof (struct process_args));
+  
+  if (args == NULL)
+    return NULL;
+
+  args->argv = (char **) palloc_get_page (0);
+  
+  if (args->argv == NULL){
+      free (args);
+      return NULL;
+  }
+
+  args->argc = 0;
+  s = strtok_r(cmd, " ", &l);
+  while(s != NULL) {
+    args->argv[args->argc] = s;
+    args->argc++;
+    s = strtok_r(NULL, " ", &l);
+  }
+
+  return args;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *arguments)
 {
-  char *file_name = file_name_;
+  struct process_args *args = arguments;
+  char *file_name = args->argv[0];
   struct intr_frame if_;
   bool success;
 
@@ -59,10 +111,13 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (args, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  palloc_free_page (args->argv[0]);
+  palloc_free_page (args->argv);
+  free (args);
+
   if (!success) 
     thread_exit ();
 
@@ -131,7 +186,7 @@ process_activate (void)
      interrupts. */
   tss_update ();
 }
-
+
 /* We load ELF binaries.  The following definitions are taken
    from the ELF specification, [ELF1], more-or-less verbatim.  */
 
@@ -195,38 +250,41 @@ struct Elf32_Phdr
 #define PF_W 2          /* Writable. */
 #define PF_R 4          /* Readable. */
 
-static bool setup_stack (void **esp);
+static bool setup_stack (struct process_args *args, void **esp);
 static bool validate_segment (const struct Elf32_Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
                           uint32_t read_bytes, uint32_t zero_bytes,
                           bool writable);
+
+
+static void *init_stack_with_args(struct process_args *args);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
    Stores the executable's entry point into *EIP
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (struct process_args *args, void (**eip) (void), void **esp)
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
+  char *file_name = args->argv[0];
   off_t file_ofs;
-  bool success = false;
   int i;
 
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
-  if (t->pagedir == NULL) 
-    goto done;
+  if (t->pagedir == NULL)
+    goto fail;
   process_activate ();
 
   /* Open executable file. */
   file = filesys_open (file_name);
-  if (file == NULL) 
+  if (file == NULL)
     {
       printf ("load: %s: open failed\n", file_name);
-      goto done; 
+      goto fail;
     }
 
   /* Read and verify executable header. */
@@ -236,10 +294,10 @@ load (const char *file_name, void (**eip) (void), void **esp)
       || ehdr.e_machine != 3
       || ehdr.e_version != 1
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
-      || ehdr.e_phnum > 1024) 
+      || ehdr.e_phnum > 1024)
     {
       printf ("load: %s: error loading executable\n", file_name);
-      goto done; 
+      goto fail;
     }
 
   /* Read program headers. */
@@ -249,11 +307,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
       struct Elf32_Phdr phdr;
 
       if (file_ofs < 0 || file_ofs > file_length (file))
-        goto done;
+        goto fail;
       file_seek (file, file_ofs);
 
       if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
-        goto done;
+        goto fail;
       file_ofs += sizeof phdr;
       switch (phdr.p_type) 
         {
@@ -267,7 +325,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
         case PT_DYNAMIC:
         case PT_INTERP:
         case PT_SHLIB:
-          goto done;
+          goto fail;
         case PT_LOAD:
           if (validate_segment (&phdr, file)) 
             {
@@ -293,27 +351,27 @@ load (const char *file_name, void (**eip) (void), void **esp)
                 }
               if (!load_segment (file, file_page, (void *) mem_page,
                                  read_bytes, zero_bytes, writable))
-                goto done;
+                goto fail;
             }
           else
-            goto done;
+            goto fail;
           break;
         }
     }
 
   /* Set up stack. */
-  if (!setup_stack (esp))
-    goto done;
+  if (!setup_stack (args, esp))
+    goto fail;
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
 
-  success = true;
+  return true;
 
- done:
-  /* We arrive here whether the load is successful or not. */
+ fail:
+  /* We arrive here when the load is failed. */
   file_close (file);
-  return success;
+  return false;
 }
 
 /* load() helpers. */
@@ -427,7 +485,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
-setup_stack (void **esp) 
+setup_stack (struct process_args *args, void **esp)
 {
   uint8_t *kpage;
   bool success = false;
@@ -437,8 +495,12 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
-      else
+        {
+          *esp = init_stack_with_args (args);
+          if (*esp == NULL)
+            success = false;
+        }
+      if (!success)
         palloc_free_page (kpage);
     }
   return success;
@@ -462,4 +524,51 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+static void * init_stack_with_args(struct process_args *args)
+{
+  uint32_t **arg_ptrs = (uint32_t **) calloc (args->argc, sizeof (uint32_t *));
+  if (arg_ptrs == NULL)
+    return NULL;
+  uint8_t *curr8 = (uint8_t *) PHYS_BASE;
+  int i;
+
+  /* Push arguments on stack, save their address in arg_ptrs. */
+  int arg_len;
+  for (i = args->argc - 1; i >= 0; i--)
+    {
+      arg_len = strlen (args->argv[i]) + 1;
+      curr8 -= arg_len;
+      memcpy (curr8, args->argv[i], arg_len);
+      arg_ptrs[i] = (uint32_t *) curr8;
+    }
+
+  /* Align, and push bytes required for aligning. */
+  int alignment = ((uint32_t) curr8) % sizeof (uintptr_t);
+  for (i = 0; i < alignment ; i++)
+     *--curr8 = 0;
+
+  /* Insert pointer to argv[argc], which must be empty. */
+  uint32_t *curr32 = (uint32_t *) curr8;
+  *--curr32 = 0;
+
+  /* Push a pointer to argv[argc-1], argv[argc-2] ...
+     until a pointer to argv[0] is pushed. */
+  for (i = args->argc - 1; i >= 0; i--)
+    *--curr32 = (uint32_t) arg_ptrs[i];
+
+  /* Push address of argv on stack. */
+  --curr32;
+  *curr32 = (uint32_t) (curr32 + 1);
+
+  /* Push argument count on stack. */
+  *--curr32 = (uint32_t) args->argc;
+
+  /* Push return address as 0 values. */
+  *--curr32 = 0;
+
+  /* Return result. */
+  free (arg_ptrs);
+  return curr32;
 }
