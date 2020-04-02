@@ -143,6 +143,8 @@ start_process (void *arguments)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
+  // waiting indefinitely
+  while(1);
   return -1;
 }
 
