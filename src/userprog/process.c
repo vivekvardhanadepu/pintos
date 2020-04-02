@@ -58,7 +58,7 @@ process_execute (const char *cmd)
     }
 
   /* Create a new thread to execute the given file name. */
-  pid = (pid_t) thread_create (args->argv[0], PRI_DEFAULT, start_process, args);
+  pid = (pid_t)thread_create(args->argv[0], PRI_DEFAULT, start_process, args);
   if (pid == TID_ERROR)
     {
       palloc_free_page (args->argv);

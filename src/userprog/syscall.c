@@ -3,8 +3,11 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#include "threads/vaddr.h"
 
-static void syscall_handler (struct intr_frame *);
+static void       syscall_handler (struct intr_frame *);
+static int        get_user (const uint8_t *uaddr);
+static bool       put_user (uint8_t *udst, uint8_t byte);
 
 void
 syscall_init (void) 
@@ -17,6 +20,21 @@ syscall_handler (struct intr_frame *f UNUSED)
 {
   printf ("system call!\n");
   thread_exit ();
+}
+
+static int
+read_from_mem (const uint8_t *uaddr)
+{
+  if(is_user_vaddr(uaddr))
+    return(get_user(uaddr));
+  else
+    return 0;
+}
+
+static bool
+write_to_mem (uint8_t *udst, uint8_t byte)
+{
+  return((is_user_vaddr(udst))? put_user(udst, byte) : false);
 }
 
 /* Reads a byte at user virtual address UADDR.
