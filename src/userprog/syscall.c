@@ -7,9 +7,15 @@
 #include "threads/init.h"
 #include "filesys/filesys.h"
 
+#define MAX_NUM_FILES 100
+
 static void       syscall_handler (struct intr_frame *);
 static int        get_user (const uint8_t *uaddr);
 static bool       put_user (uint8_t *udst, uint8_t byte);
+int               find_fd(const char* name);
+
+struct file* files_opened[MAX_NUM_FILES] = {NULL};
+int no_of_opened_files = 0;
 
 void
 syscall_init (void) 
@@ -24,30 +30,88 @@ syscall_handler (struct intr_frame *f UNUSED)
   {
   case SYS_HALT:
     shutdown_power_off();
-    break;
+    return ;
+
   case SYS_EXIT:
     //printf ("%s: exit(%d)\n", , f->error_code);
     return(read_from_mem(f->esp - 4 ));
+
   case SYS_CREATE:
     const char *name = read_from_mem(f->esp - 4 );
     off_t initial_size = read_from_mem(f->esp - 8 );
     if(name == -1 || initial_size == -1)
       return false;
-    filesys_create (name, initial_size)
+    return(filesys_create (name, initial_size));
+
   case SYS_REMOVE:
     const char *name = read_from_mem(f->esp - 4 );
     if(name == -1)
       return false;
-    return(filesys_remove (const char *name));
+    return(filesys_remove(name));
+
   case SYS_OPEN:
+    const char *name = read_from_mem(f->esp - 4 );
+    if(name == -1)
+      return -1;
+    if(files_opened[no_of_opened_files++] = filesys_open(name)){
+      return no_of_opened_files+1;
+    }
+    else
+    {
+      return -1;
+    }
 
   case SYS_FILESIZE:
-
+    int fd = read_from_mem(f->esp - 4 );
+    if(fd == -1)
+      return -1; 
+    if(files_opened[fd-2] == NULL)
+      return -1;
+    else
+    {
+      return(file_length(files_opened[fd-2]));
+    }
+    
   case SYS_READ:
+    int fd = read_from_mem(f->esp-4);
+    void* buffer = read_from_mem(f->esp-8);
+    int size = read_from_mem(f->esp-12);
+    if(fd == -1 || buffer == -1 || size <= -1)
+      return -1;
+    if(fd == 0){
+      uint8_t temp[size];
+      for(int i = 0;i<size;i++){
+        temp[i] = input_getc();
+      }
+      buffer = temp;
+      return size;
+    }
+    return(files_opened[fd-2] ? file_read(files_opened[fd-2], buffer,
+                                                 size) : -1);
 
   case SYS_WRITE:
-
+    int fd = read_from_mem(f->esp-4);
+    void* buffer = read_from_mem(f->esp-8);
+    int size = read_from_mem(f->esp-12);
+    if(fd == -1 || buffer == -1 || size <= -1)
+      return -1;
+    if(fd == 1){
+      int i = size;
+      while(i > 100){
+        putbuf(buffer, size);
+        i-=100;
+      } 
+      return size;
+    }
+    return(files_opened[fd-2] ? file_write(files_opened[fd-2], buffer,
+                                                 size) : -1);
+                                                 
   case SYS_CLOSE:
+    int fd = read_from_mem(f->esp - 4 );
+    if(fd == -1)
+      return -1; 
+    file_close(files_opened[fd -2]);
+    break;
 
   case -1:  
 
