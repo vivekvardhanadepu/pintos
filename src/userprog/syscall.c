@@ -4,6 +4,8 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/init.h"
+#include "filesys/filesys.h"
 
 static void       syscall_handler (struct intr_frame *);
 static int        get_user (const uint8_t *uaddr);
@@ -18,7 +20,40 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  printf ("system call!\n");
+  switch (read_from_mem(f->esp))
+  {
+  case SYS_HALT:
+    shutdown_power_off();
+    break;
+  case SYS_EXIT:
+    //printf ("%s: exit(%d)\n", , f->error_code);
+    return(read_from_mem(f->esp - 4 ));
+  case SYS_CREATE:
+    const char *name = read_from_mem(f->esp - 4 );
+    off_t initial_size = read_from_mem(f->esp - 8 );
+    if(name == -1 || initial_size == -1)
+      return false;
+    filesys_create (name, initial_size)
+  case SYS_REMOVE:
+    const char *name = read_from_mem(f->esp - 4 );
+    if(name == -1)
+      return false;
+    return(filesys_remove (const char *name));
+  case SYS_OPEN:
+
+  case SYS_FILESIZE:
+
+  case SYS_READ:
+
+  case SYS_WRITE:
+
+  case SYS_CLOSE:
+
+  case -1:  
+
+  default:
+    break;
+  }
   thread_exit ();
 }
 
@@ -28,7 +63,7 @@ read_from_mem (const uint8_t *uaddr)
   if(is_user_vaddr(uaddr))
     return(get_user(uaddr));
   else
-    return 0;
+    return -1;
 }
 
 static bool

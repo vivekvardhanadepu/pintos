@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <lib/user/syscall.h>
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
@@ -40,6 +41,7 @@ process_execute (const char *cmd)
   char *fn_copy;
   struct process_args *args;
   tid_t tid;
+  pid_t pid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */

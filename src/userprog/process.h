@@ -1,6 +1,6 @@
 #ifndef USERPROG_PROCESS_H
 #define USERPROG_PROCESS_H
-
+#define USERPROG
 #include "threads/thread.h"
 
 tid_t process_execute (const char *cmd);
