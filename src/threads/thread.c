@@ -94,7 +94,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
-  list_init (&blocked_list)
+  list_init (&blocked_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -143,7 +143,7 @@ thread_tick (void)
 
   ASSERT (intr_get_level () == INTR_OFF);
   
-  for (struct list_elem e = list_begin (&all_list); e != list_end (&all_list);
+  for (struct list_elem* e = list_begin (&all_list); e != list_end (&all_list);
        e = list_next (e))
     {
       struct thread *t = list_entry (e, struct thread, allelem);

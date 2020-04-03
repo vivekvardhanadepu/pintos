@@ -34,7 +34,8 @@ syscall_handler (struct intr_frame *f UNUSED)
 
   case SYS_EXIT:
     //printf ("%s: exit(%d)\n", , f->error_code);
-    return(read_from_mem(f->esp - 4 ));
+    //return(read_from_mem(f->esp - 4 ));
+    thread_exit ();
 
   case SYS_CREATE:
     const char *name = read_from_mem(f->esp - 4 );
@@ -113,8 +114,6 @@ syscall_handler (struct intr_frame *f UNUSED)
     file_close(files_opened[fd -2]);
     break;
 
-  case -1:  
-
   default:
     break;
   }
@@ -124,16 +123,23 @@ syscall_handler (struct intr_frame *f UNUSED)
 static int
 read_from_mem (const uint8_t *uaddr)
 {
-  if(is_user_vaddr(uaddr))
-    return(get_user(uaddr));
-  else
-    return -1;
+  if(is_user_vaddr(uaddr)){
+    int result;
+    if((result = get_user(uaddr)) != -1)
+      return result;
+  }
+  thread_exit();
 }
 
 static bool
 write_to_mem (uint8_t *udst, uint8_t byte)
 {
-  return((is_user_vaddr(udst))? put_user(udst, byte) : false);
+  if(is_user_vaddr(udst)){
+    bool result;
+    if((result = put_user(udst,byte)) != -1)
+      return result;
+  }
+  thread_exit();
 }
 
 /* Reads a byte at user virtual address UADDR.
