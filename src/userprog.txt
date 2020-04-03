@@ -7,7 +7,9 @@
 2.    VIVEK VARDHAN ADEPU   17CS10002   VIVEKVICKY839@GMAIL.COM
 
 ------- PRELIMINARIES ---------
->> CONSULTED STACKOVERFLOW FOR CLARIFICATION
+>> PARDON ME FOR WRITING EVERYTHING IN CAPITALS. I HAD NO TIME
+
+>> CONSULTED STACKOVERFLOW FOR CLARIFICATIONS
 
 
 
@@ -16,23 +18,20 @@
 
 ---- DATA STRUCTURES ----
 
->> A1: Copy here the declaration of each new or changed `struct' or
->> `struct' member, global or static variable, `typedef', or
->> enumeration.  Identify the purpose of each in 25 words or less.
-
+>> A1:  STRUCT PROG ARGS        :   TO STORE NO OF ARGS AND ARGS IN AN ARRAY[AFTER PARSING THE ENTIRE COMMAND]
+        PID_T PID               :   FOR PROCEES IDENTIFICATION
+        #DEFINE USERPROG        :   AS SOME OF THE INCLUDES,VARIABLES FROM OTHER FILES NEEDED IT[FOR ARG PASSING AND SYSCALLS]
+        
 ---- ALGORITHMS ----
 
->> A2: Briefly describe how you implemented argument parsing.  How do
->> you arrange for the elements of argv[] to be in the right order?
->> How do you avoid overflowing the stack page?
+>> A2: IMPLEMENTED CMD PARSING FUNCTION WHICH PARSED FULL CMD INTO FILENAME AND ARGUMENTS AND USED IN PROCESS_EXECUTE
+AdjustED start_process() and load() to make them match function parameters with given arguments. This should not violate calling convention, so they must push arguments right to left. When pushing arguments is done, load() should push return address where callee process returns. Stack pointer should point this return address.
 
 ---- RATIONALE ----
 
->> A3: Why does Pintos implement strtok_r() but not strtok()?
+>> A3: AS STRTOK_R IS THREAD SAFE AND COULD SAVE LEFTOVERS IN GIVEN POINTER
 
->> A4: In Pintos, the kernel separates commands into a executable name
->> and arguments.  In Unix-like systems, the shell does this
->> separation.  Identify at least two advantages of the Unix approach.
+>> A4: 1. SECURITY
 
 
 
@@ -42,10 +41,12 @@
 
 ---- DATA STRUCTURES ----
 
->> B1: 
->> B2: Describe how file descriptors are associated with open files.
->> Are file descriptors unique within the entire OS or just within a
->> single process?
+>> B1:  #INCLUDES               : AS SOME FUNCTIONS NEEDED THEM
+        #DEFINE MAX_NUM_FILES   : AS MALLOC IS NOT WORKING [IN PINTOS DOC], NEEDED TO INITIALIZE THE FILE_POINTERS' 
+                                  ARRAY[INDEXED BY FDs]
+        INT NO_OF_OPENED_FILES  : AS THE NAME SIGNIFIES. TO GET THE NEXT FD
+
+>> B2: I'VE MADE AN ARRAY INDEXED BY FDs[EACH TIME A NEW FILE COMES FD IS INCREASED BY 1] AND ARE UNIQUE W.R.T PROCESS
 
 ---- ALGORITHMS ----
 
@@ -77,8 +78,8 @@
 
 ---- RATIONALE ----
 
->> B6: Why did you choose to implement access to user memory from the
->> kernel in the way that you did?
+>> B6: AS MENTIONED IN THE DOC, IT IS FASTER BECAUSE IT TAKES ADVANTAGE OF MMU
 
->> B7: What advantages or disadvantages can you see to your design
->> for file descriptors?
+>> B7: DISADVs: MEMORY ISSUE, AS IT ALLOCATED FOR FIXED NO OF POINTERS[MIGHT HAVE USED LIST,
+                BUT, REFRAINED FROM IT BECAUSE OF BELOW ADVANTAGE AND NO OF FILESS ARE ANYWAY LIMITED IN FILESYS]
+       ADVs   : FETCHING IS FASTER
